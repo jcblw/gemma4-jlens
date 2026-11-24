@@ -1,0 +1,17 @@
+[project]
+name = "gemma4-jlens"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate>=1.14.0",
+    "huggingface-hub>=1.22.0",
+    "ipykernel>=7.3.0",
+    "jlens",
+    "torch>=2.13.0",
+    "transformers>=5.13.0",
+]
+
+[tool.uv.sources]
+jlens = { git = "https://github.com/anthropics/jacobian-lens" }

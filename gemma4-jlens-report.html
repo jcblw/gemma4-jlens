@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma 4 E4B under the Jacobian Lens — Four Experiments</title>
+<style>
+  :root {
+    --bg: #fbfaf7;
+    --panel: #f2f0ea;
+    --ink: #23241f;
+    --ink-dim: #6f6e64;
+    --line: #e0ddd2;
+    --chip-bg: #edeae1;
+    --country: #9a5b00;
+    --country-bg: #f6e7cf;
+    --answer: #0a6e6e;
+    --answer-bg: #d5ecea;
+    --frame: #5f5796;
+    --frame-bg: #e4e1f2;
+    --rail: #c8c4b4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a;
+      --panel: #1e2023;
+      --ink: #e6e4dc;
+      --ink-dim: #93917f;
+      --line: #2c2e32;
+      --chip-bg: #26282c;
+      --country: #e8a94e;
+      --country-bg: #33270f;
+      --answer: #55c2b8;
+      --answer-bg: #0e2b29;
+      --frame: #a89ee0;
+      --frame-bg: #262239;
+      --rail: #3a3c40;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fbfaf7; --panel: #f2f0ea; --ink: #23241f; --ink-dim: #6f6e64;
+    --line: #e0ddd2; --chip-bg: #edeae1;
+    --country: #9a5b00; --country-bg: #f6e7cf;
+    --answer: #0a6e6e; --answer-bg: #d5ecea;
+    --frame: #5f5796; --frame-bg: #e4e1f2;
+    --rail: #c8c4b4;
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a; --panel: #1e2023; --ink: #e6e4dc; --ink-dim: #93917f;
+    --line: #2c2e32; --chip-bg: #26282c;
+    --country: #e8a94e; --country-bg: #33270f;
+    --answer: #55c2b8; --answer-bg: #0e2b29;
+    --frame: #a89ee0; --frame-bg: #262239;
+    --rail: #3a3c40;
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", system-ui, sans-serif;
+    margin: 0; padding: 2.5rem 1.5rem 4rem;
+  }
+  main { max-width: 62rem; margin: 0 auto; }
+  .eyebrow {
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-dim); margin: 0 0 .5rem;
+  }
+  h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 .35rem; text-wrap: balance; }
+  .sub { color: var(--ink-dim); margin: 0 0 1.8rem; max-width: 46rem; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .prompt-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .prompt-card .label { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); }
+  .prompt-card .prompt { font-size: 1.05rem; margin: .25rem 0 .75rem; }
+  .prompt-card .prompt em { font-style: normal; border-bottom: 2px solid var(--answer); }
+  .pred-row { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.2rem 0 1.6rem; font-size: .82rem; color: var(--ink-dim); }
+  .legend .swatch { display: inline-block; width: .8em; height: .8em; border-radius: 3px; margin-right: .4em; vertical-align: -0.05em; }
+
+  .phase { margin-bottom: 1.4rem; }
+  .phase-head {
+    display: flex; baseline-position: first; gap: .75rem; align-items: baseline;
+    padding: .3rem 0 .45rem; border-bottom: 1px solid var(--line); margin-bottom: .55rem;
+  }
+  .phase-head h2 { font-size: .95rem; font-weight: 650; margin: 0; }
+  .phase-head .range { font-size: .78rem; color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
+  .phase-head .note { font-size: .82rem; color: var(--ink-dim); margin-left: auto; text-align: right; max-width: 26rem; }
+
+  .rows { overflow-x: auto; }
+  .layer-row { display: flex; gap: .3rem; align-items: center; padding: .14rem 0; min-width: max-content; }
+  .lnum {
+    font-family: ui-monospace, Menlo, monospace; font-size: .74rem; color: var(--ink-dim);
+    width: 2.4rem; flex: none; text-align: right; padding-right: .55rem;
+    border-right: 2px solid var(--rail); margin-right: .45rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .tok {
+    font-family: ui-monospace, Menlo, monospace; font-size: .78rem;
+    background: var(--chip-bg); border-radius: 4px; padding: .1rem .42rem;
+    white-space: pre; color: var(--ink);
+  }
+  .tok.c { background: var(--country-bg); color: var(--country); font-weight: 600; }
+  .tok.a { background: var(--answer-bg); color: var(--answer); font-weight: 600; }
+  .tok.f { background: var(--frame-bg); color: var(--frame); }
+
+  .phase.p1 .lnum { border-right-color: var(--rail); }
+  .phase.p2 .lnum { border-right-color: var(--country); }
+  .phase.p3 .lnum { border-right-color: var(--frame); }
+  .phase.p4 .lnum { border-right-color: var(--answer); }
+
+  footer { margin-top: 2rem; font-size: .8rem; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: .8rem; }
+  footer a { color: inherit; }
+
+
+  :root {
+    --bg: #fbfaf7;
+    --panel: #f2f0ea;
+    --ink: #23241f;
+    --ink-dim: #6f6e64;
+    --line: #e0ddd2;
+    --chip-bg: #edeae1;
+    --concept: #9a5b00;
+    --concept-bg: #f6e7cf;
+    --answer: #0a6e6e;
+    --answer-bg: #d5ecea;
+    --frame: #5f5796;
+    --frame-bg: #e4e1f2;
+    --rail: #c8c4b4;
+    --verdict: #8c3a2b;
+    --verdict-bg: #f4e2dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --panel: #1e2023; --ink: #e6e4dc; --ink-dim: #93917f;
+      --line: #2c2e32; --chip-bg: #26282c;
+      --concept: #e8a94e; --concept-bg: #33270f;
+      --answer: #55c2b8; --answer-bg: #0e2b29;
+      --frame: #a89ee0; --frame-bg: #262239;
+      --rail: #3a3c40;
+      --verdict: #e58f7a; --verdict-bg: #33201a;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fbfaf7; --panel: #f2f0ea; --ink: #23241f; --ink-dim: #6f6e64;
+    --line: #e0ddd2; --chip-bg: #edeae1;
+    --concept: #9a5b00; --concept-bg: #f6e7cf;
+    --answer: #0a6e6e; --answer-bg: #d5ecea;
+    --frame: #5f5796; --frame-bg: #e4e1f2;
+    --rail: #c8c4b4;
+    --verdict: #8c3a2b; --verdict-bg: #f4e2dc;
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a; --panel: #1e2023; --ink: #e6e4dc; --ink-dim: #93917f;
+    --line: #2c2e32; --chip-bg: #26282c;
+    --concept: #e8a94e; --concept-bg: #33270f;
+    --answer: #55c2b8; --answer-bg: #0e2b29;
+    --frame: #a89ee0; --frame-bg: #262239;
+    --rail: #3a3c40;
+    --verdict: #e58f7a; --verdict-bg: #33201a;
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", system-ui, sans-serif;
+    margin: 0; padding: 2.5rem 1.5rem 4rem;
+  }
+  main { max-width: 62rem; margin: 0 auto; }
+  .eyebrow {
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-dim); margin: 0 0 .5rem;
+  }
+  h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 .35rem; text-wrap: balance; }
+  .sub { color: var(--ink-dim); margin: 0 0 1.8rem; max-width: 46rem; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .prompt-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .prompt-card .label { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); }
+  .prompt-card .prompt { font-size: 1.05rem; margin: .25rem 0 .75rem; }
+  .prompt-card .prompt em { font-style: normal; border-bottom: 2px solid var(--answer); }
+  .pred-row { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+
+  .verdict {
+    background: var(--verdict-bg); border: 1px solid var(--verdict); border-radius: 8px;
+    padding: .85rem 1.25rem; margin-bottom: 1.4rem; font-size: .92rem;
+  }
+  .verdict strong { color: var(--verdict); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.2rem 0 1.6rem; font-size: .82rem; color: var(--ink-dim); }
+  .legend .swatch { display: inline-block; width: .8em; height: .8em; border-radius: 3px; margin-right: .4em; vertical-align: -0.05em; }
+
+  .phase { margin-bottom: 1.4rem; }
+  .phase-head {
+    display: flex; gap: .75rem; align-items: baseline;
+    padding: .3rem 0 .45rem; border-bottom: 1px solid var(--line); margin-bottom: .55rem;
+  }
+  .phase-head h2 { font-size: .95rem; font-weight: 650; margin: 0; }
+  .phase-head .range { font-size: .78rem; color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
+  .phase-head .note { font-size: .82rem; color: var(--ink-dim); margin-left: auto; text-align: right; max-width: 26rem; }
+
+  .rows { overflow-x: auto; }
+  .layer-row { display: flex; gap: .3rem; align-items: center; padding: .14rem 0; min-width: max-content; }
+  .lnum {
+    font-family: ui-monospace, Menlo, monospace; font-size: .74rem; color: var(--ink-dim);
+    width: 2.4rem; flex: none; text-align: right; padding-right: .55rem;
+    border-right: 2px solid var(--rail); margin-right: .45rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .tok {
+    font-family: ui-monospace, Menlo, monospace; font-size: .78rem;
+    background: var(--chip-bg); border-radius: 4px; padding: .1rem .42rem;
+    white-space: pre; color: var(--ink);
+  }
+  .tok.c { background: var(--concept-bg); color: var(--concept); font-weight: 600; }
+  .tok.a { background: var(--answer-bg); color: var(--answer); font-weight: 600; }
+  .tok.f { background: var(--frame-bg); color: var(--frame); }
+
+  .phase.p1 .lnum { border-right-color: var(--rail); }
+  .phase.p2 .lnum { border-right-color: var(--concept); }
+  .phase.p3 .lnum { border-right-color: var(--frame); }
+  .phase.p4 .lnum { border-right-color: var(--answer); }
+
+  footer { margin-top: 2rem; font-size: .8rem; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: .8rem; }
+  footer a { color: inherit; }
+
+
+  :root {
+    --bg: #fbfaf7;
+    --panel: #f2f0ea;
+    --ink: #23241f;
+    --ink-dim: #6f6e64;
+    --line: #e0ddd2;
+    --chip-bg: #edeae1;
+    --concept: #9a5b00;
+    --concept-bg: #f6e7cf;
+    --answer: #0a6e6e;
+    --answer-bg: #d5ecea;
+    --frame: #5f5796;
+    --frame-bg: #e4e1f2;
+    --rail: #c8c4b4;
+    --verdict: #8c3a2b;
+    --verdict-bg: #f4e2dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --panel: #1e2023; --ink: #e6e4dc; --ink-dim: #93917f;
+      --line: #2c2e32; --chip-bg: #26282c;
+      --concept: #e8a94e; --concept-bg: #33270f;
+      --answer: #55c2b8; --answer-bg: #0e2b29;
+      --frame: #a89ee0; --frame-bg: #262239;
+      --rail: #3a3c40;
+      --verdict: #e58f7a; --verdict-bg: #33201a;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fbfaf7; --panel: #f2f0ea; --ink: #23241f; --ink-dim: #6f6e64;
+    --line: #e0ddd2; --chip-bg: #edeae1;
+    --concept: #9a5b00; --concept-bg: #f6e7cf;
+    --answer: #0a6e6e; --answer-bg: #d5ecea;
+    --frame: #5f5796; --frame-bg: #e4e1f2;
+    --rail: #c8c4b4;
+    --verdict: #8c3a2b; --verdict-bg: #f4e2dc;
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a; --panel: #1e2023; --ink: #e6e4dc; --ink-dim: #93917f;
+    --line: #2c2e32; --chip-bg: #26282c;
+    --concept: #e8a94e; --concept-bg: #33270f;
+    --answer: #55c2b8; --answer-bg: #0e2b29;
+    --frame: #a89ee0; --frame-bg: #262239;
+    --rail: #3a3c40;
+    --verdict: #e58f7a; --verdict-bg: #33201a;
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", system-ui, sans-serif;
+    margin: 0; padding: 2.5rem 1.5rem 4rem;
+  }
+  main { max-width: 62rem; margin: 0 auto; }
+  .eyebrow {
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-dim); margin: 0 0 .5rem;
+  }
+  h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 .35rem; text-wrap: balance; }
+  .sub { color: var(--ink-dim); margin: 0 0 1.8rem; max-width: 46rem; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .prompt-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .prompt-card .label { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); }
+  .prompt-card .prompt { font-size: 1.05rem; margin: .25rem 0 .75rem; }
+  .prompt-card .prompt em { font-style: normal; border-bottom: 2px solid var(--answer); }
+  .pred-row { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+
+  .verdict {
+    background: var(--verdict-bg); border: 1px solid var(--verdict); border-radius: 8px;
+    padding: .85rem 1.25rem; margin-bottom: 1.4rem; font-size: .92rem;
+  }
+  .verdict strong { color: var(--verdict); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.2rem 0 1.6rem; font-size: .82rem; color: var(--ink-dim); }
+  .legend .swatch { display: inline-block; width: .8em; height: .8em; border-radius: 3px; margin-right: .4em; vertical-align: -0.05em; }
+
+  .phase { margin-bottom: 1.4rem; }
+  .phase-head {
+    display: flex; gap: .75rem; align-items: baseline;
+    padding: .3rem 0 .45rem; border-bottom: 1px solid var(--line); margin-bottom: .55rem;
+  }
+  .phase-head h2 { font-size: .95rem; font-weight: 650; margin: 0; }
+  .phase-head .range { font-size: .78rem; color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
+  .phase-head .note { font-size: .82rem; color: var(--ink-dim); margin-left: auto; text-align: right; max-width: 26rem; }
+
+  .rows { overflow-x: auto; }
+  .layer-row { display: flex; gap: .3rem; align-items: center; padding: .14rem 0; min-width: max-content; }
+  .lnum {
+    font-family: ui-monospace, Menlo, monospace; font-size: .74rem; color: var(--ink-dim);
+    width: 2.4rem; flex: none; text-align: right; padding-right: .55rem;
+    border-right: 2px solid var(--rail); margin-right: .45rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .tok {
+    font-family: ui-monospace, Menlo, monospace; font-size: .78rem;
+    background: var(--chip-bg); border-radius: 4px; padding: .1rem .42rem;
+    white-space: pre; color: var(--ink);
+  }
+  .tok.c { background: var(--concept-bg); color: var(--concept); font-weight: 600; }
+  .tok.a { background: var(--answer-bg); color: var(--answer); font-weight: 600; }
+  .tok.f { background: var(--frame-bg); color: var(--frame); }
+  .tok.leak { background: var(--verdict-bg); color: var(--verdict); font-weight: 700; outline: 1px solid var(--verdict); }
+
+  .phase.p1 .lnum { border-right-color: var(--rail); }
+  .phase.p2 .lnum { border-right-color: var(--concept); }
+  .phase.p3 .lnum { border-right-color: var(--frame); }
+  .phase.p4 .lnum { border-right-color: var(--answer); }
+
+  footer { margin-top: 2rem; font-size: .8rem; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: .8rem; }
+  footer a { color: inherit; }
+
+
+  :root {
+    --bg: #fbfaf7;
+    --panel: #f2f0ea;
+    --ink: #23241f;
+    --ink-dim: #6f6e64;
+    --line: #e0ddd2;
+    --chip-bg: #edeae1;
+    --neg: #8c3a2b;
+    --neg-bg: #f4e2dc;
+    --answer: #0a6e6e;
+    --answer-bg: #d5ecea;
+    --frame: #5f5796;
+    --frame-bg: #e4e1f2;
+    --alt: #9a5b00;
+    --alt-bg: #f6e7cf;
+    --rail: #c8c4b4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a; --panel: #1e2023; --ink: #e6e4dc; --ink-dim: #93917f;
+      --line: #2c2e32; --chip-bg: #26282c;
+      --neg: #e58f7a; --neg-bg: #33201a;
+      --answer: #55c2b8; --answer-bg: #0e2b29;
+      --frame: #a89ee0; --frame-bg: #262239;
+      --alt: #e8a94e; --alt-bg: #33270f;
+      --rail: #3a3c40;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fbfaf7; --panel: #f2f0ea; --ink: #23241f; --ink-dim: #6f6e64;
+    --line: #e0ddd2; --chip-bg: #edeae1;
+    --neg: #8c3a2b; --neg-bg: #f4e2dc;
+    --answer: #0a6e6e; --answer-bg: #d5ecea;
+    --frame: #5f5796; --frame-bg: #e4e1f2;
+    --alt: #9a5b00; --alt-bg: #f6e7cf;
+    --rail: #c8c4b4;
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a; --panel: #1e2023; --ink: #e6e4dc; --ink-dim: #93917f;
+    --line: #2c2e32; --chip-bg: #26282c;
+    --neg: #e58f7a; --neg-bg: #33201a;
+    --answer: #55c2b8; --answer-bg: #0e2b29;
+    --frame: #a89ee0; --frame-bg: #262239;
+    --alt: #e8a94e; --alt-bg: #33270f;
+    --rail: #3a3c40;
+  }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", system-ui, sans-serif;
+    margin: 0; padding: 2.5rem 1.5rem 4rem;
+  }
+  main { max-width: 62rem; margin: 0 auto; }
+  .eyebrow {
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-dim); margin: 0 0 .5rem;
+  }
+  h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 .35rem; text-wrap: balance; }
+  .sub { color: var(--ink-dim); margin: 0 0 1.8rem; max-width: 46rem; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .prompt-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .prompt-card .label { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); }
+  .prompt-card .prompt { font-size: 1.05rem; margin: .25rem 0 .75rem; }
+  .prompt-card .prompt em { font-style: normal; border-bottom: 2px solid var(--answer); }
+  .pred-row { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+
+  .verdict {
+    background: var(--neg-bg); border: 1px solid var(--neg); border-radius: 8px;
+    padding: .85rem 1.25rem; margin-bottom: 1.4rem; font-size: .92rem;
+  }
+  .verdict strong { color: var(--neg); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1.2rem 0 1.6rem; font-size: .82rem; color: var(--ink-dim); }
+  .legend .swatch { display: inline-block; width: .8em; height: .8em; border-radius: 3px; margin-right: .4em; vertical-align: -0.05em; }
+
+  .phase { margin-bottom: 1.4rem; }
+  .phase-head {
+    display: flex; gap: .75rem; align-items: baseline;
+    padding: .3rem 0 .45rem; border-bottom: 1px solid var(--line); margin-bottom: .55rem;
+  }
+  .phase-head h2 { font-size: .95rem; font-weight: 650; margin: 0; }
+  .phase-head .range { font-size: .78rem; color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
+  .phase-head .note { font-size: .82rem; color: var(--ink-dim); margin-left: auto; text-align: right; max-width: 26rem; }
+
+  .rows { overflow-x: auto; }
+  .layer-row { display: flex; gap: .3rem; align-items: center; padding: .14rem 0; min-width: max-content; }
+  .lnum {
+    font-family: ui-monospace, Menlo, monospace; font-size: .74rem; color: var(--ink-dim);
+    width: 2.4rem; flex: none; text-align: right; padding-right: .55rem;
+    border-right: 2px solid var(--rail); margin-right: .45rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .tok {
+    font-family: ui-monospace, Menlo, monospace; font-size: .78rem;
+    background: var(--chip-bg); border-radius: 4px; padding: .1rem .42rem;
+    white-space: pre; color: var(--ink);
+  }
+  .tok.n { background: var(--neg-bg); color: var(--neg); font-weight: 600; }
+  .tok.a { background: var(--answer-bg); color: var(--answer); font-weight: 600; }
+  .tok.f { background: var(--frame-bg); color: var(--frame); }
+  .tok.alt { background: var(--alt-bg); color: var(--alt); }
+
+  .phase.p1 .lnum { border-right-color: var(--rail); }
+  .phase.p2 .lnum { border-right-color: var(--neg); }
+  .phase.p3 .lnum { border-right-color: var(--frame); }
+  .phase.p4 .lnum { border-right-color: var(--answer); }
+
+  footer { margin-top: 2rem; font-size: .8rem; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: .8rem; }
+  footer a { color: inherit; }
+
+.wrap { max-width: 62rem; margin: 0 auto; }
+.wrap + .wrap { margin-top: 3.5rem; border-top: 3px double var(--line); padding-top: 2.5rem; }
+.exp-label { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); margin: 0 0 1rem; }
+.cover { max-width: 62rem; margin: 0 auto 3rem; }
+.cover h1 { font-size: 1.9rem; }
+.cover nav { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; margin-top: 1rem; font-size: .88rem; }
+.cover nav a { color: var(--ink-dim); }
+</style>
+</head>
+<body>
+<div class="cover">
+  <p class="eyebrow">Jacobian Lens · google/gemma-4-e4b-it · pre-fitted lens from solarkyle/jspace-lenses</p>
+  <h1>Gemma 4 under the Jacobian Lens: four experiments</h1>
+  <p class="sub">Anthropic's Jacobian Lens reads out what a transformer's internal activations are "poised to verbalize" — transporting each layer's residual stream into the final-layer basis and decoding it with the model's own unembedding. These four probes show four different shapes of computation: an explicit entity waypoint, a concept-only retrieval, a late faint leak, and negation held as an emoji-laden falsehood concept.</p>
+  <nav><a href="#boot">Experiment 1 · The boot-shaped country</a> <a href="#ads">Experiment 2 · The unnamed search company</a> <a href="#lang">Experiment 3 · The unnamed programming language</a> <a href="#negation">Experiment 4 · Negation</a></nav>
+</div>
+<div class="wrap" id="boot">
+<p class="exp-label">Experiment 1 · The boot-shaped country</p>
+
+  <p class="eyebrow">Jacobian Lens · google/gemma-4-e4b-it · bf16 on MPS</p>
+  <h1>What each layer is poised to say</h1>
+  <p class="sub">Top-8 lens readout at the final token position, per layer. The lens transports each layer's residual stream into the final-layer basis and decodes it with the model's own unembedding — revealing intermediate concepts the model never says aloud.</p>
+
+  <div class="prompt-card">
+    <div class="label">Prompt</div>
+    <p class="prompt">Fact: The currency used in the country shaped like a boot is <em>▁</em></p>
+    <div class="label" style="margin-bottom:.3rem">Model's actual next-token top 8</div>
+    <div class="pred-row">
+      <span class="tok"> the</span><span class="tok a"> Euro</span><span class="tok a"> Euros</span><span class="tok f"> called</span><span class="tok f"> known</span><span class="tok"> **</span><span class="tok f"> often</span><span class="tok c"> Italy</span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--country-bg); outline:1px solid var(--country)"></span>country hop (never verbalized)</span>
+    <span><span class="swatch" style="background:var(--answer-bg); outline:1px solid var(--answer)"></span>answer: Euro</span>
+    <span><span class="swatch" style="background:var(--frame-bg); outline:1px solid var(--frame)"></span>relational framing</span>
+    <span><span class="swatch" style="background:var(--chip-bg); outline:1px solid var(--line)"></span>other</span>
+  </div>
+
+  <section class="phase p1">
+    <div class="phase-head"><h2>Noise floor</h2><span class="range">L0–L11</span><span class="note">Fragments and register words — nothing about the prompt's content yet.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">0</span><span class="tok"> basically</span><span class="tok">.</span><span class="tok">,</span><span class="tok">urized</span><span class="tok">ior</span><span class="tok"> bowled</span><span class="tok"> fiberglass</span><span class="tok"> inside</span></div>
+      <div class="layer-row"><span class="lnum">1</span><span class="tok">ised</span><span class="tok">ft</span><span class="tok">fty</span><span class="tok">ora</span><span class="tok"> gonna</span><span class="tok">ior</span><span class="tok">ie</span><span class="tok">ct</span></div>
+      <div class="layer-row"><span class="lnum">2</span><span class="tok">o</span><span class="tok">lly</span><span class="tok">ft</span><span class="tok">oing</span><span class="tok"> gonna</span><span class="tok">ior</span><span class="tok">ile</span><span class="tok">nt</span></div>
+      <div class="layer-row"><span class="lnum">3</span><span class="tok">o</span><span class="tok">oing</span><span class="tok">i</span><span class="tok"> thats</span><span class="tok">ft</span><span class="tok">it</span><span class="tok">ie</span><span class="tok">nt</span></div>
+      <div class="layer-row"><span class="lnum">4</span><span class="tok"> kinda</span><span class="tok"> basically</span><span class="tok">etc</span><span class="tok"> gonna</span><span class="tok">ft</span><span class="tok">which</span><span class="tok">ie</span><span class="tok">it</span></div>
+      <div class="layer-row"><span class="lnum">5</span><span class="tok"> gonna</span><span class="tok"> kinda</span><span class="tok"> thats</span><span class="tok">ie</span><span class="tok"> thru</span><span class="tok">oing</span><span class="tok">ft</span><span class="tok">ised</span></div>
+      <div class="layer-row"><span class="lnum">6</span><span class="tok"> kinda</span><span class="tok"> thats</span><span class="tok"> gonna</span><span class="tok">ised</span><span class="tok">wards</span><span class="tok"> sorta</span><span class="tok"> govt</span><span class="tok"> centre</span></div>
+      <div class="layer-row"><span class="lnum">7</span><span class="tok"> kinda</span><span class="tok"> thats</span><span class="tok">ised</span><span class="tok"> organisation</span><span class="tok"> gonna</span><span class="tok"> alot</span><span class="tok"> organised</span><span class="tok"> colours</span></div>
+      <div class="layer-row"><span class="lnum">8</span><span class="tok"> thats</span><span class="tok"> kinda</span><span class="tok">ised</span><span class="tok"> learnt</span><span class="tok"> colour</span><span class="tok"> organised</span><span class="tok"> gonna</span><span class="tok"> colours</span></div>
+      <div class="layer-row"><span class="lnum">9</span><span class="tok"> also</span><span class="tok"> gonna</span><span class="tok">.</span><span class="tok"> learnt</span><span class="tok"> got</span><span class="tok"> maybe</span><span class="tok"> probably</span><span class="tok"> that</span></div>
+      <div class="layer-row"><span class="lnum">10</span><span class="tok">".</span><span class="tok">.</span><span class="tok"> indeed</span><span class="tok">.".</span><span class="tok"> also</span><span class="tok">”.</span><span class="tok"> hence</span><span class="tok"> perhaps</span></div>
+      <div class="layer-row"><span class="lnum">11</span><span class="tok"> also</span><span class="tok"> thing</span><span class="tok"> probably</span><span class="tok"> guys</span><span class="tok"> hence</span><span class="tok"> maybe</span><span class="tok"> somebody</span><span class="tok"> got</span></div>
+    </div>
+  </section>
+
+  <section class="phase p2">
+    <div class="phase-head"><h2>Hop 1 — “shaped like a boot” resolves to a country</h2><span class="range">L12–L21</span><span class="note">Italy appears at L13 and is never spoken in the output — the lens catches the waypoint.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">12</span><span class="tok">.".</span><span class="tok c"> country</span><span class="tok c"> nationality</span><span class="tok"> also</span><span class="tok">".</span><span class="tok"> probably</span><span class="tok"> thing</span><span class="tok c"> continent</span></div>
+      <div class="layer-row"><span class="lnum">13</span><span class="tok c"> country</span><span class="tok c"> nationality</span><span class="tok c"> nation</span><span class="tok"> ül</span><span class="tok c"> continent</span><span class="tok c">country</span><span class="tok c"> countries</span><span class="tok c"> Italy</span></div>
+      <div class="layer-row"><span class="lnum">14</span><span class="tok c"> countries</span><span class="tok c"> continent</span><span class="tok c"> country</span><span class="tok c"> nationality</span><span class="tok c">countries</span><span class="tok c"> nation</span><span class="tok"> foreigners</span><span class="tok c"> nations</span></div>
+      <div class="layer-row"><span class="lnum">15</span><span class="tok c"> country</span><span class="tok c"> Italy</span><span class="tok c"> continent</span><span class="tok c">Spain</span><span class="tok c"> continental</span><span class="tok"> geopolitical</span><span class="tok c"> nationality</span><span class="tok c"> countries</span></div>
+      <div class="layer-row"><span class="lnum">16</span><span class="tok"> geopolitical</span><span class="tok c"> Italy</span><span class="tok c"> continent</span><span class="tok c"> countries</span><span class="tok c"> continental</span><span class="tok c"> nationality</span><span class="tok c"> nations</span><span class="tok c">Spain</span></div>
+      <div class="layer-row"><span class="lnum">17</span><span class="tok c"> continent</span><span class="tok c">Spain</span><span class="tok c"> Italy</span><span class="tok c"> country</span><span class="tok c"> countries</span><span class="tok c"> Spain</span><span class="tok c"> país</span><span class="tok c">countries</span></div>
+      <div class="layer-row"><span class="lnum">18</span><span class="tok c"> continent</span><span class="tok c"> país</span><span class="tok c"> country</span><span class="tok c"> Italy</span><span class="tok c"> countries</span><span class="tok c"> continente</span><span class="tok c"> Spain</span><span class="tok c">countries</span></div>
+      <div class="layer-row"><span class="lnum">19</span><span class="tok c"> continent</span><span class="tok c"> nations</span><span class="tok c"> country</span><span class="tok c"> país</span><span class="tok c"> countries</span><span class="tok c"> continente</span><span class="tok c"> Italy</span><span class="tok c"> Spain</span></div>
+      <div class="layer-row"><span class="lnum">20</span><span class="tok c"> country</span><span class="tok c"> continent</span><span class="tok c"> countries</span><span class="tok c"> Italy</span><span class="tok c"> Spain</span><span class="tok c"> Argentina</span><span class="tok c"> nation</span><span class="tok c"> nations</span></div>
+      <div class="layer-row"><span class="lnum">21</span><span class="tok c"> country</span><span class="tok"> UNESCO</span><span class="tok c"> countries</span><span class="tok c"> Spain</span><span class="tok c"> Catalonia</span><span class="tok c"> Italy</span><span class="tok">🇪</span><span class="tok c"> Netherlands</span></div>
+    </div>
+  </section>
+
+  <section class="phase p3">
+    <div class="phase-head"><h2>Relational framing</h2><span class="range">L22–L31</span><span class="note">Copulas and stating-a-fact scaffolding: how to say it, before what to say.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">22</span><span class="tok f"> is</span><span class="tok f">is</span><span class="tok">)?</span><span class="tok">isst</span><span class="tok f"> adalah</span><span class="tok">日は</span><span class="tok f"> IS</span><span class="tok f"> are</span></div>
+      <div class="layer-row"><span class="lnum">23</span><span class="tok f"> was</span><span class="tok">.</span><span class="tok f"> is</span><span class="tok f"> has</span><span class="tok f"> were</span><span class="tok f"> would</span><span class="tok f"> became</span><span class="tok f"> consisted</span></div>
+      <div class="layer-row"><span class="lnum">24</span><span class="tok">.</span><span class="tok f"> was</span><span class="tok f"> became</span><span class="tok f"> is</span><span class="tok f"> primarily</span><span class="tok f"> has</span><span class="tok f"> underwent</span><span class="tok f"> often</span></div>
+      <div class="layer-row"><span class="lnum">25</span><span class="tok">.</span><span class="tok f"> primarily</span><span class="tok f"> often</span><span class="tok f"> became</span><span class="tok f"> was</span><span class="tok f"> typically</span><span class="tok f"> predominantly</span><span class="tok f"> is</span></div>
+      <div class="layer-row"><span class="lnum">26</span><span class="tok f"> primarily</span><span class="tok f"> often</span><span class="tok f"> typically</span><span class="tok f"> predominantly</span><span class="tok f"> usually</span><span class="tok f"> mostly</span><span class="tok f"> largely</span><span class="tok f"> generally</span></div>
+      <div class="layer-row"><span class="lnum">27</span><span class="tok f"> primarily</span><span class="tok f"> often</span><span class="tok f"> typically</span><span class="tok f"> mostly</span><span class="tok f"> predominantly</span><span class="tok f"> largely</span><span class="tok f"> generally</span><span class="tok f"> usually</span></div>
+      <div class="layer-row"><span class="lnum">28</span><span class="tok f"> called</span><span class="tok f"> typically</span><span class="tok f"> primarily</span><span class="tok f"> mostly</span><span class="tok f"> known</span><span class="tok f"> often</span><span class="tok f"> named</span><span class="tok f"> used</span></div>
+      <div class="layer-row"><span class="lnum">29</span><span class="tok f"> called</span><span class="tok f"> often</span><span class="tok f"> referred</span><span class="tok f"> known</span><span class="tok f"> typically</span><span class="tok f"> nicknamed</span><span class="tok f"> commonly</span><span class="tok f"> named</span></div>
+      <div class="layer-row"><span class="lnum">30</span><span class="tok f"> called</span><span class="tok f"> denominated</span><span class="tok f"> primarily</span><span class="tok f"> predominantly</span><span class="tok f"> typically</span><span class="tok f"> generally</span><span class="tok f"> known</span><span class="tok f"> commonly</span></div>
+      <div class="layer-row"><span class="lnum">31</span><span class="tok f"> denominated</span><span class="tok f"> generally</span><span class="tok f"> called</span><span class="tok f"> predominantly</span><span class="tok f"> primarily</span><span class="tok a"> Euros</span><span class="tok f"> typically</span><span class="tok"> Spanish</span></div>
+    </div>
+  </section>
+
+  <section class="phase p4">
+    <div class="phase-head"><h2>Hop 2 — the answer lands</h2><span class="range">L32–L40</span><span class="note">Euro resolves as a concept first — cross-lingual variants (欧元, евро, EUR) before the surface token.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">32</span><span class="tok f"> called</span><span class="tok f"> denominated</span><span class="tok"> currency</span><span class="tok a"> Euros</span><span class="tok c"> Italian</span><span class="tok f"> generally</span><span class="tok a"> Euro</span><span class="tok f"> known</span></div>
+      <div class="layer-row"><span class="lnum">33</span><span class="tok"> dollars</span><span class="tok"> currency</span><span class="tok a"> Euro</span><span class="tok"> dollar</span><span class="tok">美元</span><span class="tok a"> euros</span><span class="tok"> USD</span><span class="tok a"> euro</span></div>
+      <div class="layer-row"><span class="lnum">34</span><span class="tok a">欧元</span><span class="tok a"> Euros</span><span class="tok a"> euro</span><span class="tok a"> euros</span><span class="tok a"> Euro</span><span class="tok a"> евро</span><span class="tok a">Euro</span><span class="tok a"> EURO</span></div>
+      <div class="layer-row"><span class="lnum">35</span><span class="tok a"> Euro</span><span class="tok a"> Euros</span><span class="tok a"> euros</span><span class="tok a"> euro</span><span class="tok a"> евро</span><span class="tok"> currency</span><span class="tok a"> EURO</span><span class="tok a">Euro</span></div>
+      <div class="layer-row"><span class="lnum">36</span><span class="tok a"> Euro</span><span class="tok a"> euro</span><span class="tok a"> Euros</span><span class="tok a"> euros</span><span class="tok a">欧元</span><span class="tok a">Euro</span><span class="tok a"> EURO</span><span class="tok a"> евро</span></div>
+      <div class="layer-row"><span class="lnum">37</span><span class="tok a"> Euro</span><span class="tok a"> Euros</span><span class="tok a"> euro</span><span class="tok a"> euros</span><span class="tok a">欧元</span><span class="tok a">Euro</span><span class="tok a"> EUR</span><span class="tok a"> евро</span></div>
+      <div class="layer-row"><span class="lnum">38</span><span class="tok a"> Euro</span><span class="tok a"> euro</span><span class="tok a"> Euros</span><span class="tok a"> euros</span><span class="tok a">欧元</span><span class="tok"> the</span><span class="tok a"> EUR</span><span class="tok a">Euro</span></div>
+      <div class="layer-row"><span class="lnum">39</span><span class="tok"> the</span><span class="tok a"> Euro</span><span class="tok a"> Euros</span><span class="tok a"> euros</span><span class="tok a"> euro</span><span class="tok a">欧元</span><span class="tok a"> EUR</span><span class="tok a"> EURO</span></div>
+      <div class="layer-row"><span class="lnum">40</span><span class="tok"> the</span><span class="tok a"> Euro</span><span class="tok a"> Euros</span><span class="tok a"> euros</span><span class="tok a"> euro</span><span class="tok a"> EUR</span><span class="tok a"> EURO</span><span class="tok f"> denominated</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Pre-fitted lens: <span class="mono">solarkyle/jspace-lenses · gemma-4-e4b-it/lens.pt</span> · Library: <a href="https://github.com/anthropics/jacobian-lens">anthropics/jacobian-lens</a> · Generated from <span class="mono">~/dev/projects/gemma4-jlens/inspect_gemma.py</span>
+  </footer>
+
+</div>
+<div class="wrap" id="ads">
+<p class="exp-label">Experiment 2 · The unnamed search company</p>
+
+  <p class="eyebrow">Jacobian Lens · google/gemma-4-e4b-it · bf16 on MPS</p>
+  <h1>Does the company name leak? A business question through the lens</h1>
+  <p class="sub">The prompt describes a company without naming it. In the boot-shaped-country experiment, the hidden entity (Italy) surfaced explicitly in the middle layers. Here we test whether the same happens with a company.</p>
+
+  <div class="prompt-card">
+    <div class="label">Prompt</div>
+    <p class="prompt">Fact: The company behind the world's most popular search engine makes most of its money from <em>▁</em></p>
+    <div class="label" style="margin-bottom:.3rem">Model's actual next-token top 8</div>
+    <div class="pred-row">
+      <span class="tok a"> advertising</span><span class="tok"> digital</span><span class="tok"> selling</span><span class="tok"> targeted</span><span class="tok"> online</span><span class="tok a"> ads</span><span class="tok"> displaying</span><span class="tok a"> advertisers</span>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <strong>Result: the company name never appears.</strong> Across all 41 layers, no company token enters the top 8 at this position. Where the geography prompt routed through an explicit entity (“Italy”), this one routes through the abstract concept — <span class="mono">monetization → revenue models → advertising</span> — suggesting the fact is stored against the business concept, not the entity. (Caveat: this reads only the final token position; the entity could still be represented at earlier positions, e.g. over “search engine”.)
+  </div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--concept-bg); outline:1px solid var(--concept)"></span>money / monetization concept</span>
+    <span><span class="swatch" style="background:var(--answer-bg); outline:1px solid var(--answer)"></span>answer: advertising</span>
+    <span><span class="swatch" style="background:var(--frame-bg); outline:1px solid var(--frame)"></span>syntax &amp; framing</span>
+    <span><span class="swatch" style="background:var(--chip-bg); outline:1px solid var(--line)"></span>other</span>
+  </div>
+
+  <section class="phase p1">
+    <div class="phase-head"><h2>Noise floor</h2><span class="range">L0–L8</span><span class="note">Word fragments and register — mostly British-spelling morphology, nothing semantic.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">0</span><span class="tok"> 됐</span><span class="tok">됐</span><span class="tok">coloured</span><span class="tok"> fibres</span><span class="tok"> coloured</span><span class="tok"> realise</span><span class="tok"> realised</span><span class="tok">ised</span></div>
+      <div class="layer-row"><span class="lnum">1</span><span class="tok">ised</span><span class="tok">wards</span><span class="tok"> upto</span><span class="tok">ising</span><span class="tok"> organise</span><span class="tok">isable</span><span class="tok"> realised</span><span class="tok">or</span></div>
+      <div class="layer-row"><span class="lnum">2</span><span class="tok">isable</span><span class="tok">ised</span><span class="tok">isations</span><span class="tok"> organise</span><span class="tok">lots</span><span class="tok">wards</span><span class="tok">centre</span><span class="tok">avour</span></div>
+      <div class="layer-row"><span class="lnum">3</span><span class="tok">isable</span><span class="tok">ised</span><span class="tok">wards</span><span class="tok">wen</span><span class="tok"> kids</span><span class="tok">or</span><span class="tok">avour</span><span class="tok">ising</span></div>
+      <div class="layer-row"><span class="lnum">4</span><span class="tok">colour</span><span class="tok">centred</span><span class="tok">coloured</span><span class="tok">centre</span><span class="tok"> realised</span><span class="tok">avour</span><span class="tok">ising</span><span class="tok"> centre</span></div>
+      <div class="layer-row"><span class="lnum">5</span><span class="tok"> centred</span><span class="tok">centre</span><span class="tok">abouts</span><span class="tok">ised</span><span class="tok">ising</span><span class="tok">ally</span><span class="tok">coloured</span><span class="tok"> realised</span></div>
+      <div class="layer-row"><span class="lnum">6</span><span class="tok"> labour</span><span class="tok"> organised</span><span class="tok"> centres</span><span class="tok"> realised</span><span class="tok">ised</span><span class="tok">isable</span><span class="tok"> £</span><span class="tok">ising</span></div>
+      <div class="layer-row"><span class="lnum">7</span><span class="tok"> organised</span><span class="tok"> labour</span><span class="tok"> fertiliser</span><span class="tok"> colourful</span><span class="tok"> savoury</span><span class="tok"> labourers</span><span class="tok">ising</span><span class="tok"> utilising</span></div>
+      <div class="layer-row"><span class="lnum">8</span><span class="tok"> utilising</span><span class="tok"> organised</span><span class="tok"> utilised</span><span class="tok"> colourful</span><span class="tok"> fertilisers</span><span class="tok"> fertiliser</span><span class="tok"> realising</span><span class="tok"> labour</span></div>
+    </div>
+  </section>
+
+  <section class="phase p2">
+    <div class="phase-head"><h2>The money concept forms</h2><span class="range">L9–L21</span><span class="note">“Makes most of its money” resolves to monetization / revenue / profit — a concept, not a company.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">9</span><span class="tok"> Lifestyle</span><span class="tok"> helping</span><span class="tok">.|</span><span class="tok">.}</span><span class="tok"> lifestyle</span><span class="tok"> getting</span><span class="tok"> mainly</span><span class="tok c"> buying</span></div>
+      <div class="layer-row"><span class="lnum">10</span><span class="tok"> pretty</span><span class="tok"> really</span><span class="tok"> Luckily</span><span class="tok"> mostly</span><span class="tok"> guys</span><span class="tok"> basically</span><span class="tok"> huge</span><span class="tok"> getting</span></div>
+      <div class="layer-row"><span class="lnum">11</span><span class="tok"> guys</span><span class="tok"> Kids</span><span class="tok c"> Income</span><span class="tok c"> buying</span><span class="tok c"> Buying</span><span class="tok c"> Money</span><span class="tok"> huge</span><span class="tok"> kids</span></div>
+      <div class="layer-row"><span class="lnum">12</span><span class="tok"> kids</span><span class="tok"> Lifestyle</span><span class="tok c"> Marketing</span><span class="tok"> Kids</span><span class="tok c"> selling</span><span class="tok"> huge</span><span class="tok c"> Selling</span><span class="tok c"> Revenue</span></div>
+      <div class="layer-row"><span class="lnum">13</span><span class="tok c">selling</span><span class="tok c"> Monet</span><span class="tok c"> monetization</span><span class="tok c"> Revenue</span><span class="tok c"> monetize</span><span class="tok c"> Selling</span><span class="tok c"> selling</span><span class="tok c"> revenue</span></div>
+      <div class="layer-row"><span class="lnum">14</span><span class="tok c"> monetization</span><span class="tok c"> monet</span><span class="tok c"> revenue</span><span class="tok c"> monetize</span><span class="tok c"> Revenue</span><span class="tok c"> selling</span><span class="tok c"> sales</span><span class="tok c"> profits</span></div>
+      <div class="layer-row"><span class="lnum">15</span><span class="tok c"> monetization</span><span class="tok c"> sales</span><span class="tok c"> Marketing</span><span class="tok c"> profit</span><span class="tok c"> selling</span><span class="tok c"> profits</span><span class="tok c">profit</span><span class="tok c"> revenue</span></div>
+      <div class="layer-row"><span class="lnum">16</span><span class="tok c"> monetization</span><span class="tok c">profit</span><span class="tok c"> pricing</span><span class="tok c"> profits</span><span class="tok c"> sales</span><span class="tok c"> profitable</span><span class="tok c"> selling</span><span class="tok c"> revenue</span></div>
+      <div class="layer-row"><span class="lnum">17</span><span class="tok c"> revenue</span><span class="tok c"> pricing</span><span class="tok c"> Revenue</span><span class="tok c"> profit</span><span class="tok c"> profitability</span><span class="tok c"> profitable</span><span class="tok c"> profits</span><span class="tok c"> selling</span></div>
+      <div class="layer-row"><span class="lnum">18</span><span class="tok c"> revenue</span><span class="tok c"> profitability</span><span class="tok c"> profits</span><span class="tok c"> selling</span><span class="tok c">赚钱</span><span class="tok c"> lucrative</span><span class="tok c"> Revenue</span><span class="tok c"> profit</span></div>
+      <div class="layer-row"><span class="lnum">19</span><span class="tok c"> selling</span><span class="tok c"> monetize</span><span class="tok c"> monetization</span><span class="tok c"> Revenue</span><span class="tok c"> revenue</span><span class="tok c">selling</span><span class="tok c"> profits</span><span class="tok c"> sales</span></div>
+      <div class="layer-row"><span class="lnum">20</span><span class="tok c"> sales</span><span class="tok c"> selling</span><span class="tok c"> monetization</span><span class="tok c"> revenue</span><span class="tok c"> Revenue</span><span class="tok c"> pricing</span><span class="tok c"> commercially</span><span class="tok c"> profits</span></div>
+      <div class="layer-row"><span class="lnum">21</span><span class="tok">`}</span><span class="tok"> tyres</span><span class="tok c">お金</span><span class="tok c"> बिज़नेस</span><span class="tok c"> sales</span><span class="tok"> privatisation</span><span class="tok"> specialised</span><span class="tok"> centralised</span></div>
+    </div>
+  </section>
+
+  <section class="phase p3">
+    <div class="phase-head"><h2>Syntax checkpoint</h2><span class="range">L22–L25</span><span class="note">A brief grammatical phase — “from” in four languages, then sentence-ending punctuation.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">22</span><span class="tok f"> from</span><span class="tok f"> FROM</span><span class="tok f">from</span><span class="tok f">FROM</span><span class="tok f">getFrom</span><span class="tok"> लड़की</span><span class="tok f"> från</span><span class="tok f"> từ</span></div>
+      <div class="layer-row"><span class="lnum">23</span><span class="tok f">.</span><span class="tok f">.**</span><span class="tok f">."</span><span class="tok f">.*</span><span class="tok f"> the</span><span class="tok f">。</span><span class="tok f">*.</span><span class="tok f">**.</span></div>
+      <div class="layer-row"><span class="lnum">24</span><span class="tok f">.</span><span class="tok f">.**</span><span class="tok f">...</span><span class="tok f">…。</span><span class="tok f">."</span><span class="tok f">.*</span><span class="tok f">.'</span><span class="tok f">…</span></div>
+      <div class="layer-row"><span class="lnum">25</span><span class="tok f">.</span><span class="tok f">...</span><span class="tok f">…。</span><span class="tok f">.**</span><span class="tok f">…</span><span class="tok f">*.</span><span class="tok f">….</span><span class="tok f">.*</span></div>
+    </div>
+  </section>
+
+  <section class="phase p4">
+    <div class="phase-head"><h2>Revenue models compete, advertising wins</h2><span class="range">L26–L40</span><span class="note">Sponsorships, subscriptions, and partnerships audition at L26–L31; ads lock in cross-lingually by L32.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">26</span><span class="tok"> selling</span><span class="tok"> exporting</span><span class="tok"> consumers</span><span class="tok"> exploiting</span><span class="tok"> customers</span><span class="tok"> contracts</span><span class="tok a"> advertisements</span><span class="tok"> supplying</span></div>
+      <div class="layer-row"><span class="lnum">27</span><span class="tok"> selling</span><span class="tok a"> advertisements</span><span class="tok"> customers</span><span class="tok"> exporting</span><span class="tok"> consumers</span><span class="tok"> partnerships</span><span class="tok a"> advertising</span><span class="tok"> contracts</span></div>
+      <div class="layer-row"><span class="lnum">28</span><span class="tok"> merchants</span><span class="tok a"> advertisements</span><span class="tok"> manufacturers</span><span class="tok"> partnerships</span><span class="tok"> commissions</span><span class="tok"> contractors</span><span class="tok"> selling</span><span class="tok"> commercial</span></div>
+      <div class="layer-row"><span class="lnum">29</span><span class="tok a"> advertisements</span><span class="tok"> selling</span><span class="tok"> buying</span><span class="tok a"> advertising</span><span class="tok"> sponsorships</span><span class="tok"> supplying</span><span class="tok"> helping</span><span class="tok"> providing</span></div>
+      <div class="layer-row"><span class="lnum">30</span><span class="tok a"> advertising</span><span class="tok"> selling</span><span class="tok a"> advertisements</span><span class="tok"> buying</span><span class="tok"> sponsorships</span><span class="tok"> subscriptions</span><span class="tok"> smartphones</span><span class="tok"> investments</span></div>
+      <div class="layer-row"><span class="lnum">31</span><span class="tok a"> advertising</span><span class="tok a"> advertisements</span><span class="tok a"> advertisers</span><span class="tok"> selling</span><span class="tok"> businesses</span><span class="tok"> buying</span><span class="tok"> providing</span><span class="tok"> supplying</span></div>
+      <div class="layer-row"><span class="lnum">32</span><span class="tok a"> advertising</span><span class="tok a"> advertisements</span><span class="tok a"> advertisement</span><span class="tok a">广告</span><span class="tok a">広告</span><span class="tok a"> advertisers</span><span class="tok a"> Advertising</span><span class="tok a"> ads</span></div>
+      <div class="layer-row"><span class="lnum">33</span><span class="tok a"> advertising</span><span class="tok a"> advertisements</span><span class="tok a"> advertisers</span><span class="tok a"> ads</span><span class="tok a">广告</span><span class="tok a"> 광고</span><span class="tok"> selling</span><span class="tok a">広告</span></div>
+      <div class="layer-row"><span class="lnum">34</span><span class="tok a"> ads</span><span class="tok a"> Advert</span><span class="tok a"> advertisement</span><span class="tok a"> advert</span><span class="tok a"> advertisements</span><span class="tok a">advert</span><span class="tok a"> advertising</span><span class="tok a"> ad</span></div>
+      <div class="layer-row"><span class="lnum">35</span><span class="tok a">advert</span><span class="tok a"> ad</span><span class="tok a"> advertisement</span><span class="tok a"> advert</span><span class="tok a"> advertisements</span><span class="tok a"> Advert</span><span class="tok a"> ads</span><span class="tok a"> advertising</span></div>
+      <div class="layer-row"><span class="lnum">36</span><span class="tok a"> advertising</span><span class="tok a"> ads</span><span class="tok a"> 광고</span><span class="tok a"> advertisers</span><span class="tok a"> advertisements</span><span class="tok a"> advertisement</span><span class="tok a"> विज्ञापन</span><span class="tok a">広告</span></div>
+      <div class="layer-row"><span class="lnum">37</span><span class="tok a"> advertising</span><span class="tok a"> advertisers</span><span class="tok a"> advertisements</span><span class="tok a"> ads</span><span class="tok a">广告</span><span class="tok a"> 광고</span><span class="tok a"> advertisement</span><span class="tok a">広告</span></div>
+      <div class="layer-row"><span class="lnum">38</span><span class="tok a"> advertising</span><span class="tok a"> advertisers</span><span class="tok a"> advertisements</span><span class="tok a"> ads</span><span class="tok a"> advertisement</span><span class="tok a"> 광고</span><span class="tok a">广告</span><span class="tok a">広告</span></div>
+      <div class="layer-row"><span class="lnum">39</span><span class="tok a"> advertising</span><span class="tok a"> ads</span><span class="tok a"> advertisers</span><span class="tok a"> advertisements</span><span class="tok"> selling</span><span class="tok a">広告</span><span class="tok a"> 광고</span><span class="tok a">广告</span></div>
+      <div class="layer-row"><span class="lnum">40</span><span class="tok a"> advertising</span><span class="tok a"> ads</span><span class="tok a"> advertisements</span><span class="tok"> selling</span><span class="tok a"> advertisers</span><span class="tok"> digital</span><span class="tok"> displaying</span><span class="tok"> charging</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Pre-fitted lens: <span class="mono">solarkyle/jspace-lenses · gemma-4-e4b-it/lens.pt</span> · Library: <a href="https://github.com/anthropics/jacobian-lens">anthropics/jacobian-lens</a> · Companion experiment: boot-shaped-country readout (where the hidden entity <em>did</em> surface)
+  </footer>
+
+</div>
+<div class="wrap" id="lang">
+<p class="exp-label">Experiment 3 · The unnamed programming language</p>
+
+  <p class="eyebrow">Jacobian Lens · google/gemma-4-e4b-it · bf16 on MPS</p>
+  <h1>Does the language name leak? Third experiment in the series</h1>
+  <p class="sub">The prompt describes a programming language without naming it and asks for its file extension. Geography leaked its hidden entity early (Italy, L13); the ads question never leaked at all. This one lands in between.</p>
+
+  <div class="prompt-card">
+    <div class="label">Prompt</div>
+    <p class="prompt">Fact: The file extension for code written in the language that runs in every web browser is <em>▁</em></p>
+    <div class="label" style="margin-bottom:.3rem">Model's actual next-token top 8</div>
+    <div class="pred-row">
+      <span class="tok f"> typically</span><span class="tok a"> `.</span><span class="tok f"> usually</span><span class="tok f"> generally</span><span class="tok a"> '.</span><span class="tok f"> often</span><span class="tok f"> commonly</span><span class="tok f"> almost</span>
+    </div>
+    <p style="font-size:.82rem; color:var(--ink-dim); margin:.6rem 0 0">The model is starting the phrase “typically <span class="mono">`.js`</span>” — the hedge comes before the extension.</p>
+  </div>
+
+  <div class="verdict">
+    <strong>Result: the name leaks — late and faint.</strong> <span class="mono">JavaScript</span> enters the top 8 only at L35–L37, ranked 6th–8th, alongside <span class="mono">HTML</span>. No early entity waypoint like Italy at L13; the middle layers hold a generic <span class="mono">technology / coding</span> concept instead. Three prompts, three retrieval shapes: early explicit hop (Italy), no leak (search company), late faint leak (JavaScript).
+  </div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--verdict-bg); outline:1px solid var(--verdict)"></span>the leak: language names</span>
+    <span><span class="swatch" style="background:var(--concept-bg); outline:1px solid var(--concept)"></span>technology / coding concept</span>
+    <span><span class="swatch" style="background:var(--answer-bg); outline:1px solid var(--answer)"></span>answer: extension punctuation</span>
+    <span><span class="swatch" style="background:var(--frame-bg); outline:1px solid var(--frame)"></span>syntax &amp; hedging</span>
+    <span><span class="swatch" style="background:var(--chip-bg); outline:1px solid var(--line)"></span>other</span>
+  </div>
+
+  <section class="phase p1">
+    <div class="phase-head"><h2>Noise floor</h2><span class="range">L0–L13</span><span class="note">Fragments, British-spelling morphology, then discourse filler — no content yet.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">0</span><span class="tok">,</span><span class="tok">urized</span><span class="tok">.</span><span class="tok">ableness</span><span class="tok">かったです</span><span class="tok">.*</span><span class="tok"> bowled</span><span class="tok"> basically</span></div>
+      <div class="layer-row"><span class="lnum">1</span><span class="tok">ocs</span><span class="tok"> gonna</span><span class="tok">oing</span><span class="tok">aray</span><span class="tok">a</span><span class="tok"> thru</span><span class="tok">ised</span><span class="tok">ior</span></div>
+      <div class="layer-row"><span class="lnum">2</span><span class="tok">lly</span><span class="tok">ior</span><span class="tok">wards</span><span class="tok">ised</span><span class="tok">ally</span><span class="tok">fty</span><span class="tok">als</span><span class="tok">ft</span></div>
+      <div class="layer-row"><span class="lnum">3</span><span class="tok">wards</span><span class="tok">al</span><span class="tok">i</span><span class="tok">o</span><span class="tok"> basically</span><span class="tok">nd</span><span class="tok">ar</span><span class="tok">ol</span></div>
+      <div class="layer-row"><span class="lnum">4</span><span class="tok">al</span><span class="tok">wards</span><span class="tok">ally</span><span class="tok">on</span><span class="tok">ried</span><span class="tok">which</span><span class="tok">ised</span><span class="tok">se</span></div>
+      <div class="layer-row"><span class="lnum">5</span><span class="tok">arily</span><span class="tok">ally</span><span class="tok">enia</span><span class="tok"> labour</span><span class="tok">fte</span><span class="tok">ised</span><span class="tok">ans</span><span class="tok">al</span></div>
+      <div class="layer-row"><span class="lnum">6</span><span class="tok"> labour</span><span class="tok">ised</span><span class="tok"> colour</span><span class="tok"> realised</span><span class="tok"> recognised</span><span class="tok"> colours</span><span class="tok"> organisation</span><span class="tok"> organised</span></div>
+      <div class="layer-row"><span class="lnum">7</span><span class="tok">ised</span><span class="tok"> colour</span><span class="tok"> colours</span><span class="tok"> recognised</span><span class="tok"> recognising</span><span class="tok"> organised</span><span class="tok"> labour</span><span class="tok"> organisation</span></div>
+      <div class="layer-row"><span class="lnum">8</span><span class="tok"> colour</span><span class="tok"> recognised</span><span class="tok"> practising</span><span class="tok"> utilised</span><span class="tok"> organised</span><span class="tok"> utilising</span><span class="tok"> learnt</span><span class="tok"> realised</span></div>
+      <div class="layer-row"><span class="lnum">9</span><span class="tok">.</span><span class="tok"> which</span><span class="tok"> whereas</span><span class="tok"> something</span><span class="tok"> also</span><span class="tok"> secondly</span><span class="tok"> probably</span><span class="tok"> that</span></div>
+      <div class="layer-row"><span class="lnum">10</span><span class="tok">.</span><span class="tok"> also</span><span class="tok">".</span><span class="tok"> everybody</span><span class="tok"> that</span><span class="tok"> which</span><span class="tok"> except</span><span class="tok"> hence</span></div>
+      <div class="layer-row"><span class="lnum">11</span><span class="tok"> everybody</span><span class="tok"> anymore</span><span class="tok"> basically</span><span class="tok"> somebody</span><span class="tok"> anybody</span><span class="tok"> moreover</span><span class="tok"> whereas</span><span class="tok"> also</span></div>
+      <div class="layer-row"><span class="lnum">12</span><span class="tok"> basically</span><span class="tok"> everybody</span><span class="tok"> also</span><span class="tok"> anymore</span><span class="tok"> worldwide</span><span class="tok"> somebody</span><span class="tok"> gonna</span><span class="tok"> something</span></div>
+      <div class="layer-row"><span class="lnum">13</span><span class="tok"> yeah</span><span class="tok"> worldwide</span><span class="tok"> huge</span><span class="tok"> basically</span><span class="tok"> freaking</span><span class="tok"> amazing</span><span class="tok"> gonna</span><span class="tok"> everybody</span></div>
+    </div>
+  </section>
+
+  <section class="phase p2">
+    <div class="phase-head"><h2>The domain forms — but stays generic</h2><span class="range">L14–L20</span><span class="note">Coding / technology / software — the topic resolves, the specific language doesn't.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">14</span><span class="tok"> worldwide</span><span class="tok c"> languages</span><span class="tok c"> technological</span><span class="tok c"> coding</span><span class="tok c"> language</span><span class="tok c"> programmable</span><span class="tok"> global</span><span class="tok c"> technology</span></div>
+      <div class="layer-row"><span class="lnum">15</span><span class="tok c"> technology</span><span class="tok c"> coding</span><span class="tok">在全球</span><span class="tok c"> technological</span><span class="tok"> worldwide</span><span class="tok c"> code</span><span class="tok c"> programmer</span><span class="tok c"> software</span></div>
+      <div class="layer-row"><span class="lnum">16</span><span class="tok c"> technology</span><span class="tok c"> technological</span><span class="tok c"> technolog</span><span class="tok c"> technologies</span><span class="tok c"> technologie</span><span class="tok c"> software</span><span class="tok c"> technologically</span><span class="tok c"> geek</span></div>
+      <div class="layer-row"><span class="lnum">17</span><span class="tok c"> technologie</span><span class="tok c"> technological</span><span class="tok c"> technology</span><span class="tok"> worldwide</span><span class="tok c"> technolog</span><span class="tok c"> bytecode</span><span class="tok c"> coder</span><span class="tok c"> technologies</span></div>
+      <div class="layer-row"><span class="lnum">18</span><span class="tok c"> technologie</span><span class="tok c"> technological</span><span class="tok"> worldwide</span><span class="tok c"> revolutionized</span><span class="tok c"> technolog</span><span class="tok c"> technology</span><span class="tok"> revolution</span><span class="tok c"> technologies</span></div>
+      <div class="layer-row"><span class="lnum">19</span><span class="tok"> worldwide</span><span class="tok c"> technologie</span><span class="tok c"> technology</span><span class="tok c"> technolog</span><span class="tok"> mondiale</span><span class="tok">在全球</span><span class="tok c"> technological</span><span class="tok"> globally</span></div>
+      <div class="layer-row"><span class="lnum">20</span><span class="tok"> worldwide</span><span class="tok c"> technology</span><span class="tok c"> technologies</span><span class="tok c"> technological</span><span class="tok"> iconic</span><span class="tok"> famously</span><span class="tok c"> technolog</span><span class="tok"> peoples</span></div>
+    </div>
+  </section>
+
+  <section class="phase p3">
+    <div class="phase-head"><h2>Copula, then a wall of hedges</h2><span class="range">L21–L34</span><span class="note">“is”, then hedging adverbs in five languages — the model commits to qualifying before answering.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">21</span><span class="tok">).*</span><span class="tok f"> IS</span><span class="tok">.**</span><span class="tok f"> is</span><span class="tok">.*</span><span class="tok c"> technology</span><span class="tok c"> technological</span><span class="tok">)?</span></div>
+      <div class="layer-row"><span class="lnum">22</span><span class="tok f"> is</span><span class="tok f">is</span><span class="tok"> __________</span><span class="tok"> **</span><span class="tok f"> ہے۔</span><span class="tok"> ________</span><span class="tok"> hardest</span><span class="tok f"> IS</span></div>
+      <div class="layer-row"><span class="lnum">23</span><span class="tok f"> was</span><span class="tok f"> is</span><span class="tok">.</span><span class="tok f"> has</span><span class="tok f"> would</span><span class="tok f"> became</span><span class="tok f"> were</span><span class="tok"> [</span></div>
+      <div class="layer-row"><span class="lnum">24</span><span class="tok">.</span><span class="tok f"> was</span><span class="tok f"> became</span><span class="tok f"> is</span><span class="tok">.[</span><span class="tok">.*</span><span class="tok f"> has</span><span class="tok f"> because</span></div>
+      <div class="layer-row"><span class="lnum">25</span><span class="tok">.</span><span class="tok f"> often</span><span class="tok f"> typically</span><span class="tok f"> became</span><span class="tok f"> was</span><span class="tok f"> usually</span><span class="tok f"> primarily</span><span class="tok f"> likely</span></div>
+      <div class="layer-row"><span class="lnum">26</span><span class="tok f"> often</span><span class="tok f"> usually</span><span class="tok f"> typically</span><span class="tok f"> generally</span><span class="tok f"> primarily</span><span class="tok f"> commonly</span><span class="tok f"> likely</span><span class="tok f"> frequently</span></div>
+      <div class="layer-row"><span class="lnum">27</span><span class="tok f"> usually</span><span class="tok f"> typically</span><span class="tok f"> often</span><span class="tok f"> generally</span><span class="tok f"> likely</span><span class="tok f"> probably</span><span class="tok f"> sometimes</span><span class="tok f"> primarily</span></div>
+      <div class="layer-row"><span class="lnum">28</span><span class="tok f"> usually</span><span class="tok f"> typically</span><span class="tok f"> often</span><span class="tok f">usually</span><span class="tok f"> commonly</span><span class="tok f">typically</span><span class="tok f"> generally</span><span class="tok f"> Typically</span></div>
+      <div class="layer-row"><span class="lnum">29</span><span class="tok f"> often</span><span class="tok f"> generally</span><span class="tok f"> généralement</span><span class="tok f">usually</span><span class="tok f"> geralmente</span><span class="tok f"> commonly</span><span class="tok f"> typically</span><span class="tok f"> usually</span></div>
+      <div class="layer-row"><span class="lnum">30</span><span class="tok f"> usually</span><span class="tok f"> generally</span><span class="tok f"> often</span><span class="tok f"> genellikle</span><span class="tok f"> typically</span><span class="tok f"> généralement</span><span class="tok f"> geralmente</span><span class="tok f">usually</span></div>
+      <div class="layer-row"><span class="lnum">31</span><span class="tok f"> typically</span><span class="tok f"> often</span><span class="tok f"> usually</span><span class="tok f"> generally</span><span class="tok f"> généralement</span><span class="tok f"> geralmente</span><span class="tok f">usually</span><span class="tok f"> commonly</span></div>
+      <div class="layer-row"><span class="lnum">32</span><span class="tok f"> usually</span><span class="tok f"> generally</span><span class="tok f"> often</span><span class="tok f"> typically</span><span class="tok f"> généralement</span><span class="tok f"> geralmente</span><span class="tok f">通常</span><span class="tok f"> commonly</span></div>
+      <div class="layer-row"><span class="lnum">33</span><span class="tok f"> often</span><span class="tok f"> typically</span><span class="tok f"> genellikle</span><span class="tok f">通常</span><span class="tok f"> généralement</span><span class="tok f"> generally</span><span class="tok f"> usually</span><span class="tok f"> commonly</span></div>
+      <div class="layer-row"><span class="lnum">34</span><span class="tok f"> typically</span><span class="tok f"> usually</span><span class="tok f"> often</span><span class="tok f"> commonly</span><span class="tok f"> généralement</span><span class="tok f">通常</span><span class="tok leak"> HTML</span><span class="tok f"> generally</span></div>
+    </div>
+  </section>
+
+  <section class="phase p4">
+    <div class="phase-head"><h2>The leak — and the extension takes shape</h2><span class="range">L35–L40</span><span class="note">JavaScript surfaces at rank 6–8 for three layers, then the extension punctuation wins.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">35</span><span class="tok a"> `.</span><span class="tok f"> typically</span><span class="tok f"> usually</span><span class="tok a"> ".</span><span class="tok a"> *.</span><span class="tok a"> '.</span><span class="tok f"> generally</span><span class="tok leak"> JavaScript</span></div>
+      <div class="layer-row"><span class="lnum">36</span><span class="tok a"> `.</span><span class="tok f"> usually</span><span class="tok f"> typically</span><span class="tok f"> generally</span><span class="tok a"> ".</span><span class="tok a"> '.</span><span class="tok leak"> JavaScript</span><span class="tok leak"> HTML</span></div>
+      <div class="layer-row"><span class="lnum">37</span><span class="tok a"> `.</span><span class="tok f"> usually</span><span class="tok f"> typically</span><span class="tok a"> ".</span><span class="tok f"> generally</span><span class="tok a"> '.</span><span class="tok f"> often</span><span class="tok leak"> JavaScript</span></div>
+      <div class="layer-row"><span class="lnum">38</span><span class="tok f"> typically</span><span class="tok a"> `.</span><span class="tok f"> usually</span><span class="tok f"> generally</span><span class="tok a"> ".</span><span class="tok a"> '.</span><span class="tok f"> often</span><span class="tok f"> commonly</span></div>
+      <div class="layer-row"><span class="lnum">39</span><span class="tok a"> `.</span><span class="tok f"> typically</span><span class="tok f"> usually</span><span class="tok f"> generally</span><span class="tok a"> '.</span><span class="tok a"> ".</span><span class="tok f"> often</span><span class="tok f"> commonly</span></div>
+      <div class="layer-row"><span class="lnum">40</span><span class="tok f"> typically</span><span class="tok a"> `.</span><span class="tok f"> usually</span><span class="tok a"> '.</span><span class="tok f"> generally</span><span class="tok f"> often</span><span class="tok a"> ".</span><span class="tok f"> commonly</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Pre-fitted lens: <span class="mono">solarkyle/jspace-lenses · gemma-4-e4b-it/lens.pt</span> · Library: <a href="https://github.com/anthropics/jacobian-lens">anthropics/jacobian-lens</a> · Series: boot-shaped country (early leak) · search company (no leak) · browser language (late faint leak)
+  </footer>
+
+</div>
+<div class="wrap" id="negation">
+<p class="exp-label">Experiment 4 · Negation</p>
+
+  <p class="eyebrow">Jacobian Lens · google/gemma-4-e4b-it · bf16 on MPS</p>
+  <h1>Negation through the lens: the model represents “false” in emoji</h1>
+  <p class="sub">The prompt ends in “is not”, forcing the model to hold a negation while it works out what to say. The lens reveals how it stores that: as an explicit falsehood concept — ❌ 🚫 🙅 <span class="mono">untrue falsehood misconception</span> — for ten layers before any city appears.</p>
+
+  <div class="prompt-card">
+    <div class="label">Prompt</div>
+    <p class="prompt">Fact: The capital of France is not <em>▁</em></p>
+    <div class="label" style="margin-bottom:.3rem">Model's actual next-token top 8</div>
+    <div class="pred-row">
+      <span class="tok a"> Paris</span><span class="tok alt"> London</span><span class="tok alt"> Berlin</span><span class="tok alt"> Rome</span><span class="tok alt"> Lyon</span><span class="tok f"> always</span><span class="tok"> in</span><span class="tok"> the</span>
+    </div>
+    <p style="font-size:.82rem; color:var(--ink-dim); margin:.6rem 0 0">Top prediction is “Paris” — it's starting a sentence like “…is not Paris, but rather…” or correcting a false premise.</p>
+  </div>
+
+  <div class="verdict">
+    <strong>Finding: negation is a first-class concept in the middle layers.</strong> Layers 8–19 hold ❌, 🚫, 🙅, a winking 😉, and words like <span class="mono">untrue · falsehood · misconception · wrong</span> — the model marks “a false statement is in play” long before it retrieves any geography. At L21 the readout even turns contrastive in three languages (<span class="mono">बल्कि · 而是 · 也不是</span> — “but rather”). Paris doesn't enter the top 8 until L30.
+  </div>
+
+  <div class="legend">
+    <span><span class="swatch" style="background:var(--neg-bg); outline:1px solid var(--neg)"></span>negation / falsehood concept</span>
+    <span><span class="swatch" style="background:var(--answer-bg); outline:1px solid var(--answer)"></span>Paris</span>
+    <span><span class="swatch" style="background:var(--alt-bg); outline:1px solid var(--alt)"></span>competing capitals</span>
+    <span><span class="swatch" style="background:var(--frame-bg); outline:1px solid var(--frame)"></span>syntax &amp; framing</span>
+    <span><span class="swatch" style="background:var(--chip-bg); outline:1px solid var(--line)"></span>other</span>
+  </div>
+
+  <section class="phase p1">
+    <div class="phase-head"><h2>Noise floor</h2><span class="range">L0–L7</span><span class="note">Register and discourse filler — though contrast words (besides, except, anymore) creep in early.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">0</span><span class="tok"> organised</span><span class="tok"> labours</span><span class="tok"> rubbish</span><span class="tok"> consequent</span><span class="tok"> colours</span><span class="tok"> labour</span><span class="tok"> realised</span><span class="tok n"> wrongly</span></div>
+      <div class="layer-row"><span class="lnum">1</span><span class="tok"> upto</span><span class="tok"> gonna</span><span class="tok"> till</span><span class="tok"> hence</span><span class="tok"> basically</span><span class="tok">nt</span><span class="tok">orry</span><span class="tok"> ok</span></div>
+      <div class="layer-row"><span class="lnum">2</span><span class="tok"> guys</span><span class="tok"> basically</span><span class="tok"> besides</span><span class="tok"> people</span><span class="tok"> guy</span><span class="tok"> gonna</span><span class="tok"> till</span><span class="tok"> getting</span></div>
+      <div class="layer-row"><span class="lnum">3</span><span class="tok"> till</span><span class="tok"> besides</span><span class="tok"> basically</span><span class="tok"> hence</span><span class="tok"> nowadays</span><span class="tok"> anymore</span><span class="tok"> except</span><span class="tok"> probably</span></div>
+      <div class="layer-row"><span class="lnum">4</span><span class="tok"> basically</span><span class="tok"> till</span><span class="tok">.</span><span class="tok"> etc</span><span class="tok"> besides</span><span class="tok"> about</span><span class="tok">etc</span><span class="tok">.*</span></div>
+      <div class="layer-row"><span class="lnum">5</span><span class="tok"> because</span><span class="tok"> anymore</span><span class="tok"> besides</span><span class="tok"> anybody</span><span class="tok"> therefore</span><span class="tok n">但是</span><span class="tok"> hence</span><span class="tok"> except</span></div>
+      <div class="layer-row"><span class="lnum">6</span><span class="tok"> guys</span><span class="tok"> besides</span><span class="tok"> anymore</span><span class="tok"> anybody</span><span class="tok"> because</span><span class="tok"> guy</span><span class="tok n"> kidding</span><span class="tok"> somebody</span></div>
+      <div class="layer-row"><span class="lnum">7</span><span class="tok"> anymore</span><span class="tok"> analysing</span><span class="tok"> because</span><span class="tok"> anyway</span><span class="tok"> okay</span><span class="tok n">但是</span><span class="tok"> anybody</span><span class="tok"> somebody</span></div>
+    </div>
+  </section>
+
+  <section class="phase p2">
+    <div class="phase-head"><h2>The falsehood concept</h2><span class="range">L8–L21</span><span class="note">❌ 🚫 🙅 untrue · falsehood · misconception — negation held as an explicit concept, partly in emoji.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">8</span><span class="tok"> anymore</span><span class="tok n">❌</span><span class="tok">\n\n</span><span class="tok"> recognised</span><span class="tok"> anyways</span><span class="tok n"> pretence</span><span class="tok"> utilising</span><span class="tok n"> whatsoever</span></div>
+      <div class="layer-row"><span class="lnum">9</span><span class="tok n">❌</span><span class="tok"> anymore</span><span class="tok n">🙅</span><span class="tok n"> nor</span><span class="tok n">🚫</span><span class="tok n"> whatsoever</span><span class="tok n"> rumoured</span><span class="tok"> anyway</span></div>
+      <div class="layer-row"><span class="lnum">10</span><span class="tok">.&lt;/</span><span class="tok"> coloured</span><span class="tok n"> weird</span><span class="tok"> colour</span><span class="tok n"> rumoured</span><span class="tok"> humour</span><span class="tok"> colours</span><span class="tok"> anymore</span></div>
+      <div class="layer-row"><span class="lnum">11</span><span class="tok"> anymore</span><span class="tok"> anyway</span><span class="tok"> colour</span><span class="tok n"> whatsoever</span><span class="tok n"> rubbish</span><span class="tok"> coloured</span><span class="tok"> nobody</span><span class="tok n"> nor</span></div>
+      <div class="layer-row"><span class="lnum">12</span><span class="tok"> anymore</span><span class="tok"> colour</span><span class="tok"> colours</span><span class="tok"> coloured</span><span class="tok"> anyway</span><span class="tok"> recognised</span><span class="tok">colour</span><span class="tok n"> weird</span></div>
+      <div class="layer-row"><span class="lnum">13</span><span class="tok"> colour</span><span class="tok"> coloured</span><span class="tok"> colours</span><span class="tok">coloured</span><span class="tok"> colourful</span><span class="tok"> humour</span><span class="tok">colour</span><span class="tok"> anymore</span></div>
+      <div class="layer-row"><span class="lnum">14</span><span class="tok n"> dodgy</span><span class="tok"> humour</span><span class="tok"> colour</span><span class="tok"> apologise</span><span class="tok n"> rumour</span><span class="tok"> colours</span><span class="tok n"> rumoured</span><span class="tok"> coloured</span></div>
+      <div class="layer-row"><span class="lnum">15</span><span class="tok n"> dodgy</span><span class="tok"> humour</span><span class="tok n"> rumour</span><span class="tok n"> rumoured</span><span class="tok"> colour</span><span class="tok n">❌</span><span class="tok n"> weird</span><span class="tok"> Brexit</span></div>
+      <div class="layer-row"><span class="lnum">16</span><span class="tok n">❌</span><span class="tok n"> dodgy</span><span class="tok"> geopolitical</span><span class="tok n">🙅</span><span class="tok"> humour</span><span class="tok n">🚫</span><span class="tok n"> rumour</span><span class="tok"> Brexit</span></div>
+      <div class="layer-row"><span class="lnum">17</span><span class="tok n"> 😉</span><span class="tok n">❌</span><span class="tok"> humour</span><span class="tok"> Brexit</span><span class="tok"> nationality</span><span class="tok"> colour</span><span class="tok"> coloured</span><span class="tok"> recognised</span></div>
+      <div class="layer-row"><span class="lnum">18</span><span class="tok n"> 😉</span><span class="tok n">❌</span><span class="tok"> anyway</span><span class="tok n"> wrong</span><span class="tok n">🚫</span><span class="tok n"> falsehood</span><span class="tok n"> untrue</span><span class="tok"> anymore</span></div>
+      <div class="layer-row"><span class="lnum">19</span><span class="tok n">❌</span><span class="tok n"> falsehood</span><span class="tok"> anyway</span><span class="tok n">🚫</span><span class="tok n">🙅</span><span class="tok n"> 😉</span><span class="tok n"> untrue</span><span class="tok n"> misconception</span></div>
+      <div class="layer-row"><span class="lnum">20</span><span class="tok n"> untrue</span><span class="tok n"> incorrect</span><span class="tok"> therefore</span><span class="tok"> anyway</span><span class="tok n"> falsehood</span><span class="tok"> anymore</span><span class="tok n"> wrong</span><span class="tok"> nowhere</span></div>
+      <div class="layer-row"><span class="lnum">21</span><span class="tok n"> बल्कि</span><span class="tok n"> nor</span><span class="tok"> anymore</span><span class="tok n">而是</span><span class="tok n">也不是</span><span class="tok"> therefore</span><span class="tok n"> untrue</span><span class="tok">.")</span></div>
+    </div>
+  </section>
+
+  <section class="phase p3">
+    <div class="phase-head"><h2>Syntax checkpoint</h2><span class="range">L22–L29</span><span class="note">The literal “not”, punctuation, then hedges — “always”, “necessarily”, “located”.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">22</span><span class="tok f"> not</span><span class="tok f">IsNot</span><span class="tok f">not</span><span class="tok f">Not</span><span class="tok f"> neither</span><span class="tok f"> cannot</span><span class="tok f"> nor</span><span class="tok f"> Not</span></div>
+      <div class="layer-row"><span class="lnum">23</span><span class="tok f">.</span><span class="tok f">.";</span><span class="tok f">.*</span><span class="tok f">."</span><span class="tok f">.**</span><span class="tok f">*.</span><span class="tok f">.").</span><span class="tok f">.';</span></div>
+      <div class="layer-row"><span class="lnum">24</span><span class="tok f">.</span><span class="tok f">.';</span><span class="tok f">.*</span><span class="tok f">.";</span><span class="tok f">.}</span><span class="tok f">.]</span><span class="tok f">."</span><span class="tok f">.**</span></div>
+      <div class="layer-row"><span class="lnum">25</span><span class="tok f">.</span><span class="tok f">.';</span><span class="tok f">.";</span><span class="tok f">.*</span><span class="tok f">.]</span><span class="tok f">.}</span><span class="tok f">.").</span><span class="tok f"> because</span></div>
+      <div class="layer-row"><span class="lnum">26</span><span class="tok f">.";</span><span class="tok f">.';</span><span class="tok"> anymore</span><span class="tok f"> because</span><span class="tok f"> but</span><span class="tok f"> instead</span><span class="tok"> نہیں۔</span><span class="tok f"> always</span></div>
+      <div class="layer-row"><span class="lnum">27</span><span class="tok f"> always</span><span class="tok"> anymore</span><span class="tok f"> sometimes</span><span class="tok f"> actually</span><span class="tok"> famous</span><span class="tok f"> directly</span><span class="tok f"> necessarily</span><span class="tok f"> entirely</span></div>
+      <div class="layer-row"><span class="lnum">28</span><span class="tok"> anymore</span><span class="tok f"> always</span><span class="tok"> famous</span><span class="tok"> anywhere</span><span class="tok"> another</span><span class="tok"> anything</span><span class="tok f"> necessarily</span><span class="tok f"> located</span></div>
+      <div class="layer-row"><span class="lnum">29</span><span class="tok f"> always</span><span class="tok f"> only</span><span class="tok f"> located</span><span class="tok"> invented</span><span class="tok"> overrated</span><span class="tok"> anymore</span><span class="tok f"> necessarily</span><span class="tok"> known</span></div>
+    </div>
+  </section>
+
+  <section class="phase p4">
+    <div class="phase-head"><h2>Geography arrives — Paris wins its own negation</h2><span class="range">L30–L40</span><span class="note">Paris enters at L30 and takes rank 1 immediately, trailed by every plausible wrong capital.</span></div>
+    <div class="rows">
+      <div class="layer-row"><span class="lnum">30</span><span class="tok f"> located</span><span class="tok alt"> Jerusalem</span><span class="tok f"> always</span><span class="tok alt"> Barcelona</span><span class="tok a"> Paris</span><span class="tok"> overrated</span><span class="tok alt"> Madrid</span><span class="tok alt"> London</span></div>
+      <div class="layer-row"><span class="lnum">31</span><span class="tok a"> Paris</span><span class="tok alt"> London</span><span class="tok alt"> Jerusalem</span><span class="tok alt"> Istanbul</span><span class="tok alt"> Barcelona</span><span class="tok alt"> Madrid</span><span class="tok alt"> Moscow</span><span class="tok alt"> Prague</span></div>
+      <div class="layer-row"><span class="lnum">32</span><span class="tok a"> Paris</span><span class="tok a"> France</span><span class="tok alt"> Barcelona</span><span class="tok alt"> Madrid</span><span class="tok alt"> Jerusalem</span><span class="tok alt"> Rome</span><span class="tok alt"> Istanbul</span><span class="tok alt"> London</span></div>
+      <div class="layer-row"><span class="lnum">33</span><span class="tok a"> Paris</span><span class="tok alt"> Madrid</span><span class="tok alt"> London</span><span class="tok alt"> Istanbul</span><span class="tok alt"> Barcelona</span><span class="tok alt"> Tokyo</span><span class="tok alt"> Rome</span><span class="tok alt"> Berlin</span></div>
+      <div class="layer-row"><span class="lnum">34</span><span class="tok a"> Paris</span><span class="tok a"> France</span><span class="tok alt"> Madrid</span><span class="tok a">Paris</span><span class="tok alt"> London</span><span class="tok a"> Parisian</span><span class="tok alt"> Brussels</span><span class="tok alt"> Rome</span></div>
+      <div class="layer-row"><span class="lnum">35</span><span class="tok a"> Paris</span><span class="tok alt"> Madrid</span><span class="tok a"> Parisian</span><span class="tok alt"> London</span><span class="tok a">Paris</span><span class="tok alt"> Berlin</span><span class="tok a"> France</span><span class="tok alt"> Tokyo</span></div>
+      <div class="layer-row"><span class="lnum">36</span><span class="tok a"> Paris</span><span class="tok alt"> London</span><span class="tok alt"> Rome</span><span class="tok alt"> Madrid</span><span class="tok alt"> Brussels</span><span class="tok alt"> Tokyo</span><span class="tok alt"> Moscow</span><span class="tok alt"> Berlin</span></div>
+      <div class="layer-row"><span class="lnum">37</span><span class="tok a"> Paris</span><span class="tok alt"> Rome</span><span class="tok a"> Parisian</span><span class="tok alt"> London</span><span class="tok alt"> Madrid</span><span class="tok a">Paris</span><span class="tok alt"> Berlin</span><span class="tok alt"> Tokyo</span></div>
+      <div class="layer-row"><span class="lnum">38</span><span class="tok a"> Paris</span><span class="tok alt"> Berlin</span><span class="tok alt"> Madrid</span><span class="tok a">Paris</span><span class="tok alt"> Rome</span><span class="tok alt"> London</span><span class="tok a"> Parisian</span><span class="tok alt"> Tokyo</span></div>
+      <div class="layer-row"><span class="lnum">39</span><span class="tok a"> Paris</span><span class="tok alt"> London</span><span class="tok alt"> Rome</span><span class="tok alt"> Madrid</span><span class="tok alt"> Berlin</span><span class="tok a"> Parisian</span><span class="tok a">Paris</span><span class="tok alt"> Moscow</span></div>
+      <div class="layer-row"><span class="lnum">40</span><span class="tok a"> Paris</span><span class="tok alt"> London</span><span class="tok alt"> Berlin</span><span class="tok alt"> Rome</span><span class="tok alt"> Madrid</span><span class="tok a"> Parisian</span><span class="tok f"> always</span><span class="tok a">Paris</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Pre-fitted lens: <span class="mono">solarkyle/jspace-lenses · gemma-4-e4b-it/lens.pt</span> · Library: <a href="https://github.com/anthropics/jacobian-lens">anthropics/jacobian-lens</a> · Series: boot-shaped country · search company · browser language · <strong>negation</strong>
+  </footer>
+
+</div>
+</body>
+</html>
